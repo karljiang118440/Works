@@ -110,12 +110,13 @@ net.eval()
 net.to("cuda")
 
 model_name = model_path.split("/")[-1].split(".")[0]
-model_path = f"models/onnx/{model_name}.onnx"
+# model_path = f"models/onnx/{model_name}.onnx"
+model_path = "./models/weights/gazenet.onnx"
 
 dummy_input = torch.randn(1, 3, 112, 112).to("cuda")
 
 torch.onnx.export(net, dummy_input, model_path, export_params=True, 
-verbose=False, input_names=['input'], output_names=['pose', 'landms'])
+verbose=False, input_names=['input'], output_names=['gaze'])
 
 
 
