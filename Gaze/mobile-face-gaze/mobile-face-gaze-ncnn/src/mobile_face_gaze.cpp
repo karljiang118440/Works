@@ -11,7 +11,9 @@
 #include <vector>
 #include <algorithm>
 
-int runlandmark(cv::Mat& roi, cv::Mat& image, ncnn::Net &landmark, int landmark_size_width, int landmark_size_height, float x1, float y1)
+
+
+int run_gaze(cv::Mat& roi, cv::Mat& image, ncnn::Net &landmark, int landmark_size_width, int landmark_size_height, float x1, float y1)
 {
     int w = roi.cols;
     int h = roi.rows;
@@ -24,14 +26,38 @@ int runlandmark(cv::Mat& roi, cv::Mat& image, ncnn::Net &landmark, int landmark_
 
     ncnn::Extractor ex = landmark.create_extractor();
     ex.set_num_threads(16);
-    ex.input("data", in);
+    ex.input("input", in);
     ncnn::Mat out;
-    ex.extract("prelu1", out);
+    ex.extract("gaze", out);
+
+    ncnn::Mat gaze;
+
+
+
+
+    printf("gaze %f %f\n", out[0], out[1]);
+
+    int length = 150;
+
+    float dx = -length * sin(out[1]);
+    float dy = -length * sin(out[0]);
+
+    printf("dx dy %.2f %.2f\n", dx, dy);
+    
+
+    cv::arrowedLine(image, cv::Point(50, 50), cv::Point(50+ dx, 50 + dy), cv::Scalar(255, 0, 255), 2, 8, 0, 0.3);
+
+
 
     float sw, sh;
 	sw = (float)w/(float)landmark_size_width;
 	sh = (float)h/(float)landmark_size_width;
-    
+
+
+    // 这里需要对模型进行解析处理
+
+
+
     for (int i = 0; i < 64; i++)
     {
         float px,py;
@@ -111,7 +137,9 @@ int demo(cv::Mat& image, ncnn::Net &detector, int detector_size_width, int detec
             //截取人体ROI
             cv::Mat roi;
             roi = bgr(cv::Rect(x1, y1, x2-x1, y2-y1)).clone();
-            runlandmark(roi, image, landmark, landmark_size_width, landmark_size_height, x1, y1);
+            run_gaze(roi, image, landmark, landmark_size_width, landmark_size_height, x1, y1);
+
+
             cv::rectangle (image, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(255, 255, 0), 1, 1, 0);
         }
 
@@ -139,12 +167,12 @@ int test_cam()
     // landmark.load_param("../models/yolo/landmark106.param");
     // landmark.load_model("../models/yolo/landmark106.bin");
 
-    landmark.load_param("../models/iris_lnet.param");
-    landmark.load_model("../models/iris_lnet.bin");
+    landmark.load_param("../models/gazenet_sim-opt-fp16.param");
+    landmark.load_model("../models/gazenet_sim-opt-fp16.bin");
 
 
-    int landmark_size_width  =  160;
-    int landmark_size_height =  80;
+    int gaze_size_width  =  112;
+    int gaze_size_height =  112;
 
     cv::Mat frame;
     cv::VideoCapture cap(0);
@@ -153,16 +181,23 @@ int test_cam()
     {
         cap >> frame;
         double start = ncnn::get_current_time();
-        demo(frame, detector, detector_size_width, detector_size_height, landmark, landmark_size_width, landmark_size_height);
+        demo(frame, detector, detector_size_width, detector_size_height, landmark, gaze_size_width, gaze_size_height);
         //demo(frame, detector, 1280, 1080, landmark, landmark_size_width, landmark_size_height);
         double end = ncnn::get_current_time();
         double time = end - start;
         printf("Time:%7.2f \n",time);
+
         cv::imshow("demo", frame);
+
+
+
+
         cv::waitKey(1);
     }
     return 0;
 }
+
+
 int main()
 {
     test_cam();
