@@ -13,7 +13,68 @@
 
 
 
-int run_gaze(cv::Mat& roi, cv::Mat& image, ncnn::Net &landmark, int landmark_size_width, int landmark_size_height, float x1, float y1)
+
+
+void  run_gaze_test(cv::Mat roi, cv::Mat image, float lefteye_x, float lefteye_y,float righteye_x,float righteye_y)
+{
+    int w = roi.cols;
+    int h = roi.rows;
+
+
+
+    int gaze_size_width = 112;
+    int gaze_size_height =112;
+
+    
+    ncnn::Mat in = ncnn::Mat::from_pixels_resize(roi.data, ncnn::Mat::PIXEL_BGR,\
+                                                 roi.cols, roi.rows, gaze_size_width, gaze_size_height);
+    //数据预处理
+    const float mean_vals_gaze[3] = {127.5f, 127.5f, 127.5f};
+    const float norm_vals_gaze[3] = {1/127.5f, 1/127.5f, 1/127.5f};
+    in.substract_mean_normalize(mean_vals_gaze, norm_vals_gaze);
+
+
+
+    ncnn::Net gaze_feature;
+
+    gaze_feature.load_param("../models/gazenet_sim-opt-fp16.param");
+    gaze_feature.load_model("../models/gazenet_sim-opt-fp16.bin");
+
+
+
+    ncnn::Extractor ex = gaze_feature.create_extractor();
+
+    ex.set_num_threads(16);
+    ex.input("input", in);
+    ncnn::Mat out;
+    ex.extract("gaze", out);
+
+    ncnn::Mat gaze;
+
+
+    int length = 300;
+
+    float dx = -length * sin(out[1]);
+    float dy = -length * sin(out[0]);
+
+
+    
+
+    cv::arrowedLine(image, cv::Point(lefteye_x, lefteye_y), cv::Point(lefteye_x+ dx, lefteye_y + dy), cv::Scalar(255, 0, 255), 2, 8, 0, 0.3);
+
+    cv::arrowedLine(image, cv::Point(righteye_x, righteye_y), cv::Point(righteye_x+ dx, righteye_y + dy), cv::Scalar(255, 0, 255), 2, 8, 0, 0.3);
+
+
+    // return image;
+
+
+}
+
+
+
+
+
+int runlandmark(cv::Mat& roi, cv::Mat& image, ncnn::Net &landmark, int landmark_size_width, int landmark_size_height, float x1, float y1)
 {
     int w = roi.cols;
     int h = roi.rows;
@@ -26,45 +87,66 @@ int run_gaze(cv::Mat& roi, cv::Mat& image, ncnn::Net &landmark, int landmark_siz
 
     ncnn::Extractor ex = landmark.create_extractor();
     ex.set_num_threads(16);
-    ex.input("input", in);
+    ex.input("data", in);
     ncnn::Mat out;
-    ex.extract("gaze", out);
-
-    ncnn::Mat gaze;
-
-
-
-
-    printf("gaze %f %f\n", out[0], out[1]);
-
-    int length = 150;
-
-    float dx = -length * sin(out[1]);
-    float dy = -length * sin(out[0]);
-
-    printf("dx dy %.2f %.2f\n", dx, dy);
-    
-
-    cv::arrowedLine(image, cv::Point(50, 50), cv::Point(50+ dx, 50 + dy), cv::Scalar(255, 0, 255), 2, 8, 0, 0.3);
-
-
+    ex.extract("bn6_3_bn6_3_scale", out);
 
     float sw, sh;
 	sw = (float)w/(float)landmark_size_width;
 	sh = (float)h/(float)landmark_size_width;
 
 
-    // 这里需要对模型进行解析处理
 
 
+    int gaze_size_width = 112;
+    int gaze_size_height =112;
 
-    for (int i = 0; i < 64; i++)
+
+    ncnn::Mat in1 = ncnn::Mat::from_pixels_resize(roi.data, ncnn::Mat::PIXEL_BGR,\
+                                                 roi.cols, roi.rows, gaze_size_width, gaze_size_height);
+    //数据预处理
+    const float mean_vals_gaze[3] = {127.5f, 127.5f, 127.5f};
+    const float norm_vals_gaze[3] = {1/127.5f, 1/127.5f, 1/127.5f};
+    in1.substract_mean_normalize(mean_vals_gaze, norm_vals_gaze);
+
+    ncnn::Net gaze_feature;
+    gaze_feature.load_param("../models/gazenet_sim-opt-fp16.param");
+    gaze_feature.load_model("../models/gazenet_sim-opt-fp16.bin");
+
+    ncnn::Extractor ex1 = gaze_feature.create_extractor();
+
+    ex1.input("input", in1);
+    ncnn::Mat out1;
+    ex1.extract("gaze", out1);
+
+    ncnn::Mat gaze;
+
+    int length = 300;
+
+    float dx = -length * sin(out1[1]);
+    float dy = -length * sin(out1[0]);
+
+    
+    for (int i = 0; i < 106; i++)
     {
         float px,py;
         px = out[i*2]*landmark_size_width*sw+x1;
         py = out[i*2+1]*landmark_size_width*sh+y1;
 	    //画实心点
 	    cv::circle(image, cv::Point(px, py), 1, cv::Scalar(255,255,255),-1);
+
+        float lefteye_x  = out[43*2]*landmark_size_width*sw+x1;
+
+        float lefteye_y =  out[43*2+1]*landmark_size_width*sh+y1;
+
+        cv::arrowedLine(image, cv::Point(lefteye_x, lefteye_y), cv::Point(lefteye_x+ dx, lefteye_y + dy), cv::Scalar(255, 0, 255), 2, 8, 0, 0.3);
+
+        // cv::arrowedLine(image, cv::Point(righteye_x, righteye_y), cv::Point(righteye_x+ dx, righteye_y + dy), cv::Scalar(255, 0, 255), 2, 8, 0, 0.3);
+
+
+
+
+
     }
 
     return 0;
@@ -91,11 +173,7 @@ int demo(cv::Mat& image, ncnn::Net &detector, int detector_size_width, int detec
     ex.set_num_threads(16);
     ex.input("data", in);
     ncnn::Mat out;
-    // ex.extract("output", out);
-
     ex.extract("output", out);
-
-    
 
     for (int i = 0; i < out.h; i++)
     {
@@ -137,12 +215,18 @@ int demo(cv::Mat& image, ncnn::Net &detector, int detector_size_width, int detec
             //截取人体ROI
             cv::Mat roi;
             roi = bgr(cv::Rect(x1, y1, x2-x1, y2-y1)).clone();
-            run_gaze(roi, image, landmark, landmark_size_width, landmark_size_height, x1, y1);
 
+            // cv::Mat FaceArea = image(cv::Rect(x1,y1,x2-x1,y2-y1));
 
-            cv::rectangle (image, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(255, 255, 0), 1, 1, 0);
+            // cv::Mat FaceArea = bgr(cv::Rect(x1, y1, x2-x1, y2-y1)).clone();
+
+            runlandmark(roi, image, landmark, landmark_size_width, landmark_size_height, x1, y1);
+   
+            // cv::rectangle (image, cv::Point(x1, y1), cv::Point(x2, y2), cv::Scalar(255, 255, 0), 1, 1, 0);
+
+    
+        
         }
-
     }
 
 
@@ -157,22 +241,16 @@ int test_cam()
     detector.load_param("../models/yoloface-500k.param");
     detector.load_model("../models/yoloface-500k.bin");
 
+
     int detector_size_width  = 320;
     int detector_size_height = 256;
 
-
-
     //定义106关键点预测器
     ncnn::Net landmark;  
-    // landmark.load_param("../models/yolo/landmark106.param");
-    // landmark.load_model("../models/yolo/landmark106.bin");
-
-    landmark.load_param("../models/gazenet_sim-opt-fp16.param");
-    landmark.load_model("../models/gazenet_sim-opt-fp16.bin");
-
-
-    int gaze_size_width  =  112;
-    int gaze_size_height =  112;
+    landmark.load_param("../models/landmark106.param");
+    landmark.load_model("../models/landmark106.bin");
+    int landmark_size_width  =  112;
+    int landmark_size_height =  112;
 
     cv::Mat frame;
     cv::VideoCapture cap(0);
@@ -181,17 +259,12 @@ int test_cam()
     {
         cap >> frame;
         double start = ncnn::get_current_time();
-        demo(frame, detector, detector_size_width, detector_size_height, landmark, gaze_size_width, gaze_size_height);
-        //demo(frame, detector, 1280, 1080, landmark, landmark_size_width, landmark_size_height);
+        demo(frame, detector, detector_size_width, detector_size_height, landmark, landmark_size_width, landmark_size_height);
+
         double end = ncnn::get_current_time();
         double time = end - start;
         printf("Time:%7.2f \n",time);
-
         cv::imshow("demo", frame);
-
-
-
-
         cv::waitKey(1);
     }
     return 0;
